@@ -49,6 +49,22 @@ class DateTimeToStringTransformer extends BaseDateTimeTransformer
     private $parseUsingPipe;
 
     /**
+     * Whether the time format is AM/PM.
+     *
+     * @var bool
+     */
+    private $ampm;
+
+    /**
+     * Fallback format to use an AM/PM time when the AM/PM marker
+     * is omitted and the format is 'H:i:s' or 'H:i'.
+     * 
+     * @var string
+     */
+    private $ampmFallbackParseFormat;
+
+
+    /**
      * Transforms a \DateTime instance to a string
      *
      * @see \DateTime::format() for supported formats
@@ -83,6 +99,14 @@ class DateTimeToStringTransformer extends BaseDateTimeTransformer
         if ($this->parseUsingPipe && false === strpos($this->parseFormat, '|')) {
             $this->parseFormat .= '|';
         }
+
+	// Detect the presence of the AM/PM marker in the format
+	$this->ampm = preg_match('/.+[A|a][ \t]*/', $this->parseFormat);
+	
+	if($this->ampm) {
+	  $tmpFormat = preg_replace('/[Gg]/','H',$this->parseFormat);
+	  $this->ampmFallbackParseFormat = trim(preg_replace('/[ \t]*[Aa]/','', $tmpFormat));
+	}
     }
 
     /**
@@ -141,6 +165,13 @@ class DateTimeToStringTransformer extends BaseDateTimeTransformer
         try {
             $outputTz = new \DateTimeZone($this->outputTimezone);
             $dateTime = \DateTime::createFromFormat($this->parseFormat, $value, $outputTz);
+
+	    // Some browsers, notably, Google Chrome of 07-30-2014, send AM/PM format
+	    // back to the application without the AM/PM marker, in the 'H:i' or 'H:i:s' format.
+	    // The solution used here is is to use the 'H:i' or 'H:i:s' format as backup.
+	    if(false === $dateTime && $this->ampm) {
+	      $dateTime = \DateTime::createFromFormat($this->ampmFallbackParseFormat, $value, $outputTz);
+	    }
 
             $lastErrors = \DateTime::getLastErrors();
 
