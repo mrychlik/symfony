@@ -17,6 +17,10 @@
                 echo ':';
                 echo $view['form']->widget($form['second'], $vars);
             }
+            if ($with_ampm) {
+                echo ':';
+                echo $view['form']->widget($form['ampm'], $vars);
+            }
         ?>
     </div>
 <?php endif ?>
