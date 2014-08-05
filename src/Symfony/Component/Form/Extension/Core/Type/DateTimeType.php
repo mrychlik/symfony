@@ -83,6 +83,11 @@ class DateTimeType extends AbstractType
             $timeParts[] = 'second';
         }
 
+        if ($options['with_ampm']) {
+            $parts[] = 'ampm';
+            $timeParts[] = 'ampm';
+        }
+
         $dateFormat = is_int($options['date_format']) ? $options['date_format'] : self::DEFAULT_DATE_FORMAT;
         $timeFormat = self::DEFAULT_TIME_FORMAT;
         $calendar = \IntlDateFormatter::GREGORIAN;
@@ -125,6 +130,7 @@ class DateTimeType extends AbstractType
                 'seconds',
                 'with_minutes',
                 'with_seconds',
+		'with_ampm',
                 'empty_value',
                 'required',
                 'translation_domain',
@@ -146,8 +152,7 @@ class DateTimeType extends AbstractType
             $dateOptions['error_bubbling'] = $timeOptions['error_bubbling'] = true;
 
             $builder
-                ->addViewTransformer(new DataTransformerChain(array(
-                    new DateTimeToArrayTransformer($options['model_timezone'], $options['view_timezone'], $parts),
+                ->addViewTransformer(new DataTransformerChain(array(new DateTimeToArrayTransformer($options['model_timezone'], $options['view_timezone'], $parts, false, $timeOptions['with_ampm']),
                     new ArrayToPartsTransformer(array(
                         'date' => $dateParts,
                         'time' => $timeParts,
@@ -167,9 +172,8 @@ class DateTimeType extends AbstractType
                 new DateTimeToTimestampTransformer($options['model_timezone'], $options['model_timezone'])
             ));
         } elseif ('array' === $options['input']) {
-            $builder->addModelTransformer(new ReversedTransformer(
-                new DateTimeToArrayTransformer($options['model_timezone'], $options['model_timezone'], $parts)
-            ));
+	    $builder->addModelTransformer(new ReversedTransformer(new DateTimeToArrayTransformer($options['model_timezone'], $options['model_timezone'], $parts, false, $options['with_ampm'])
+	    ));
         }
     }
 
@@ -218,6 +222,7 @@ class DateTimeType extends AbstractType
             'time_widget'    => $timeWidget,
             'with_minutes'   => true,
             'with_seconds'   => false,
+            'with_ampm'      => false,	    
             // Don't modify \DateTime classes by reference, we treat
             // them like immutable value objects
             'by_reference'   => false,
