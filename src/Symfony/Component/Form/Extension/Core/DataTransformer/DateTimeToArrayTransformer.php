@@ -23,6 +23,8 @@ use Symfony\Component\Form\Exception\UnexpectedTypeException;
 class DateTimeToArrayTransformer extends BaseDateTimeTransformer
 {
     private $pad;
+    private $ampm;
+    private $hour_format; 
 
     private $fields;
 
@@ -33,19 +35,27 @@ class DateTimeToArrayTransformer extends BaseDateTimeTransformer
      * @param string $outputTimezone The output timezone
      * @param array  $fields         The date fields
      * @param bool   $pad            Whether to use padding
+     * @param bool   $ampm           Whether the time is in AM/PM format
      *
      * @throws UnexpectedTypeException if a timezone is not a string
      */
-    public function __construct($inputTimezone = null, $outputTimezone = null, array $fields = null, $pad = false)
+    public function __construct($inputTimezone = null, $outputTimezone = null, array $fields = null, $pad = false, $ampm = false)
     {
         parent::__construct($inputTimezone, $outputTimezone);
 
+	$this->ampm = (bool) $ampm;
+	
+	$this->hour_format = $this->ampm ? 'g' : 'H';
         if (null === $fields) {
             $fields = array('year', 'month', 'day', 'hour', 'minute', 'second');
+	    if( $this->ampm) {
+	      $fields[] = 'ampm';
+	    }
         }
 
         $this->fields = $fields;
         $this->pad = (bool) $pad;
+
     }
 
     /**
@@ -69,6 +79,7 @@ class DateTimeToArrayTransformer extends BaseDateTimeTransformer
                 'hour'    => '',
                 'minute'  => '',
                 'second'  => '',
+		'ampm'    => '',
             ), array_flip($this->fields));
         }
 
@@ -89,13 +100,17 @@ class DateTimeToArrayTransformer extends BaseDateTimeTransformer
             'year'    => $dateTime->format('Y'),
             'month'   => $dateTime->format('m'),
             'day'     => $dateTime->format('d'),
-            'hour'    => $dateTime->format('H'),
+            'hour'    => $dateTime->format($this->hour_format),
             'minute'  => $dateTime->format('i'),
             'second'  => $dateTime->format('s'),
+	    'ampm'    => $dateTime->format('A'),
         ), array_flip($this->fields));
 
         if (!$this->pad) {
-            foreach ($result as &$entry) {
+            foreach ($result as $key => &$entry) {
+	        if('ampm' === $key) {
+		  continue;
+		}
                 // remove leading zeros
                 $entry = (string) (int) $entry;
             }
@@ -172,13 +187,23 @@ class DateTimeToArrayTransformer extends BaseDateTimeTransformer
             throw new TransformationFailedException('This second is invalid');
         }
 
+        if (isset($value['ampm']) && !($value['ampm'] === 'AM' || $value['ampm'] === 'PM')) {
+            throw new TransformationFailedException('This AM/PM designation is invalid');
+        }
+
+
         try {
             $dateTime = new \DateTime(sprintf(
                 '%s-%s-%s %s:%s:%s %s',
                 empty($value['year']) ? '1970' : $value['year'],
                 empty($value['month']) ? '1' : $value['month'],
                 empty($value['day']) ? '1' : $value['day'],
-                empty($value['hour']) ? '0' : $value['hour'],
+		empty($value['hour'])
+		    ? '0'
+		    : ( (isset($value['ampm']) && $value['ampm'] === 'PM')
+			? ($value['hour'] + 12)
+			: $value['hour']
+			),
                 empty($value['minute']) ? '0' : $value['minute'],
                 empty($value['second']) ? '0' : $value['second'],
                 $this->outputTimezone
