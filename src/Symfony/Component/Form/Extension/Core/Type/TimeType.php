@@ -31,10 +31,14 @@ class TimeType extends AbstractType
     public function buildForm(FormBuilderInterface $builder, array $options)
     {
         $parts  = array('hour');
-        $format = 'H';
+	$format = $options['with_ampm'] ? 'g' : 'H';
 
         if ($options['with_seconds'] && !$options['with_minutes']) {
             throw new InvalidConfigurationException('You can not disable minutes if you have enabled seconds.');
+        }
+	
+        if ($options['with_ampm'] && max($options['hours']) > 12) {
+	    throw new InvalidConfigurationException('Maximum our for AM/PM time must be <= 12.');
         }
 
         if ($options['with_minutes']) {
@@ -47,10 +51,15 @@ class TimeType extends AbstractType
             $parts[] = 'second';
         }
 
+        if ($options['with_ampm']) {
+	    $format .= ' A';
+            $parts[] = 'ampm';
+        }
+
         if ('single_text' === $options['widget']) {
             $builder->addViewTransformer(new DateTimeToStringTransformer($options['model_timezone'], $options['view_timezone'], $format));
         } else {
-            $hourOptions = $minuteOptions = $secondOptions = array(
+            $hourOptions = $minuteOptions = $secondOptions = $ampmOptions = array(
                 'error_bubbling' => true,
             );
 
@@ -85,6 +94,11 @@ class TimeType extends AbstractType
                     $secondOptions['empty_value'] = $options['empty_value']['second'];
                 }
 
+		if ($options['with_ampm']) {
+		    $ampmOptions['choices'] = array('AM' => 'AM', 'PM' => 'PM');
+		    $ampmOptions['label'] = false;
+		}
+
                 // Append generic carry-along options
                 foreach (array('required', 'translation_domain') as $passOpt) {
                     $hourOptions[$passOpt] = $options[$passOpt];
@@ -95,6 +109,10 @@ class TimeType extends AbstractType
 
                     if ($options['with_seconds']) {
                         $secondOptions[$passOpt] = $options[$passOpt];
+                    }
+
+                    if ($options['with_ampm']) {
+		        $secondOptions[$passOpt] = $options[$passOpt];
                     }
                 }
             }
@@ -109,20 +127,28 @@ class TimeType extends AbstractType
                 $builder->add('second', $options['widget'], $secondOptions);
             }
 
-            $builder->addViewTransformer(new DateTimeToArrayTransformer($options['model_timezone'], $options['view_timezone'], $parts, 'text' === $options['widget']));
+            if ($options['with_ampm']) {
+	        $builder->add('ampm',  'choice', $ampmOptions);
+	    }
+
+            $builder->addViewTransformer(new DateTimeToArrayTransformer($options['model_timezone'],
+									$options['view_timezone'],
+									$parts,
+									'text' === $options['widget'],
+									$options['with_ampm']));
         }
 
         if ('string' === $options['input']) {
             $builder->addModelTransformer(new ReversedTransformer(
-                new DateTimeToStringTransformer($options['model_timezone'], $options['model_timezone'], 'H:i:s')
+                new DateTimeToStringTransformer($options['model_timezone'], $options['model_timezone'],
+						$options['with_ampm'] ? 'g:i:s A' : 'H:i:s')
             ));
         } elseif ('timestamp' === $options['input']) {
             $builder->addModelTransformer(new ReversedTransformer(
                 new DateTimeToTimestampTransformer($options['model_timezone'], $options['model_timezone'])
             ));
         } elseif ('array' === $options['input']) {
-            $builder->addModelTransformer(new ReversedTransformer(
-                new DateTimeToArrayTransformer($options['model_timezone'], $options['model_timezone'], $parts)
+	  $builder->addModelTransformer(new ReversedTransformer(new DateTimeToArrayTransformer($options['model_timezone'], $options['model_timezone'], $parts, false, $options['with_ampm'])
             ));
         }
     }
@@ -136,6 +162,7 @@ class TimeType extends AbstractType
             'widget'       => $options['widget'],
             'with_minutes' => $options['with_minutes'],
             'with_seconds' => $options['with_seconds'],
+            'with_ampm'    => $options['with_ampm'],	    
         ));
 
         if ('single_text' === $options['widget']) {
@@ -169,7 +196,7 @@ class TimeType extends AbstractType
                 $default = $emptyValueDefault($options);
 
                 return array_merge(
-                    array('hour' => $default, 'minute' => $default, 'second' => $default),
+		    array('hour' => $default, 'minute' => $default, 'second' => $default, 'ampm' => $default),
                     $emptyValue
                 );
             }
@@ -177,18 +204,24 @@ class TimeType extends AbstractType
             return array(
                 'hour' => $emptyValue,
                 'minute' => $emptyValue,
-                'second' => $emptyValue
+                'second' => $emptyValue,
+                'ampm'   => $emptyValue,		
             );
         };
 
+	$hoursDefault = function(Options $options) {
+	    return $options['with_ampm'] ? range(0, 12) : range(0, 23);
+	};
+
         $resolver->setDefaults(array(
-            'hours'          => range(0, 23),
+	    'hours'          => $hoursDefault,
             'minutes'        => range(0, 59),
             'seconds'        => range(0, 59),
             'widget'         => 'choice',
             'input'          => 'datetime',
             'with_minutes'   => true,
             'with_seconds'   => false,
+            'with_ampm'      => false,	    
             'model_timezone' => null,
             'view_timezone'  => null,
             'empty_value'    => $emptyValue,
